@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { FirebaseError } from 'firebase/app';
 
 export const LoginForm: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -11,8 +12,33 @@ export const LoginForm: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const { login, signInWithGoogle, resetPassword } = useAuth(); // ✅ Make sure `resetPassword` is in AuthContext
+  const { login, signInWithGoogle, resetPassword } = useAuth();
   const navigate = useNavigate();
+
+  const handleAuthError = (err: unknown, defaultMessage: string) => {
+    setLoading(false);
+    if (err instanceof FirebaseError) {
+      // Provide more specific feedback for common Firebase errors
+      switch (err.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          setError('Invalid email or password.');
+          break;
+        case 'auth/network-request-failed':
+          setError('Network error. Please check your internet connection.');
+          break;
+        case 'auth/popup-closed-by-user':
+          // Silently handle this, as it's not a real error
+          break;
+        default:
+          console.error(err.message);
+          setError(defaultMessage);
+      }
+    } else {
+      console.error(err);
+      setError(defaultMessage);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,8 +49,9 @@ export const LoginForm: React.FC = () => {
     try {
       await login(email, password);
       navigate('/');
-    } catch (error: any) {
-      setError('Failed to sign in. Please check your credentials.');
+    } catch (error) {
+      handleAuthError(error, 'Failed to sign in. Please check your credentials.');
+    } finally {
       setLoading(false);
     }
   };
@@ -37,8 +64,9 @@ export const LoginForm: React.FC = () => {
     try {
       await signInWithGoogle();
       navigate('/');
-    } catch (error: any) {
-      setError('Google sign in failed. Please try again.');
+    } catch (error) {
+      handleAuthError(error, 'Google sign-in failed. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -53,10 +81,13 @@ export const LoginForm: React.FC = () => {
     }
 
     try {
+      setLoading(true);
       await resetPassword(email);
       setMessage('Password reset email sent! Check your inbox.');
-    } catch (error: any) {
-      setError('Failed to send reset email. Please try again.');
+    } catch (error) {
+      handleAuthError(error, 'Failed to send reset email. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -79,8 +110,12 @@ export const LoginForm: React.FC = () => {
         <button
           type="button"
           onClick={handleGoogleSignIn}
-          className="w-full border border-gray-300 rounded-md py-2 flex items-center justify-center text-sm font-medium hover:bg-gray-50"
+          disabled={loading}
+          className="w-full border border-gray-300 rounded-md py-2 flex items-center justify-center text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
         >
+          {loading && (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          )}
           <img
             src="https://www.svgrepo.com/show/475656/google-color.svg"
             alt="Google"
@@ -98,8 +133,8 @@ export const LoginForm: React.FC = () => {
 
         {/* Login Form */}
         <form className="space-y-4" onSubmit={handleSubmit}>
-          {error && <div className="text-sm text-red-600">{error}</div>}
-          {message && <div className="text-sm text-green-600">{message}</div>}
+          {error && <div className="p-3 text-sm text-red-700 bg-red-100 rounded-md">{error}</div>}
+          {message && <div className="p-3 text-sm text-green-700 bg-green-100 rounded-md">{message}</div>}
 
           <div className="relative">
             <input
@@ -145,6 +180,7 @@ export const LoginForm: React.FC = () => {
               type="button"
               className="text-black font-medium hover:underline"
               onClick={handleForgotPassword}
+              disabled={loading}
             >
               Forgot password
             </button>
@@ -155,9 +191,16 @@ export const LoginForm: React.FC = () => {
             disabled={loading}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="w-full bg-black text-white py-2 rounded-md text-sm font-semibold hover:bg-gray-900 disabled:opacity-50"
+            className="w-full bg-black text-white py-2 rounded-md text-sm font-semibold hover:bg-gray-900 disabled:opacity-50 flex items-center justify-center"
           >
-            {loading ? 'Signing In...' : 'Sign in'}
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Signing In...
+              </>
+            ) : (
+              'Sign in'
+            )}
           </motion.button>
         </form>
 
